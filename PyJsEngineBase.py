@@ -1,6 +1,7 @@
 # coding=utf-8
 
 
+import inspect
 import chardet as crd
 import codecs as cdc
 import re
@@ -8,9 +9,13 @@ from copy import deepcopy
 from threading import Lock
 
 from js2py import EvalJs
-from js2py.base import to_python
+from js2py.base import to_python, JsObjectWrapper
 
 from MiniUtils import *
+
+
+def get_method_name():
+    return inspect.stack()[1][3]
 
 
 class PyJsEngineBase:
@@ -157,10 +162,66 @@ class PyJsEngineBase:
         self.create_js_context()
         self._context.execute(script)
 
+    # 解析参数字典，按规则规范参数格式及赋予默认值
+    # jskwargs Js传递的参数字典，rules 解析规则字典（格式：{key:(name, type, default)}，type有 s字串/sr原始字串/i整数/r实数/b布尔 ）
+    def args_parser(self, jskwargs, rules):
+        if jskwargs is None or rules is None:
+            return None
+
+        if isinstance(jskwargs, JsObjectWrapper):
+            # 确保jskwargs为非JsObjectWrapper
+            jskwargs = jskwargs.to_dict()
+
+        args = {}
+        keys = set(jskwargs.keys())
+        for pk, pv in rules.items():
+            if isinstance(pk, str) and isinstance(pv, tuple) and len(pv) in {2, 3}:
+                # pk: key, pn: name, pt: type, pd: default
+                lpv = len(pv)
+                if lpv == 2:
+                    pn, pt = pv
+                    pd = None
+                    if pk not in keys:
+                        continue
+                else:
+                    pn, pt, pd = pv
+
+                value = jskwargs.get(pk, pd)
+                if isinstance(value, bytes):
+                    value = value.decode(self.DEFAULT_ENCODING)
+                if pt in {'s', 'i', 'r', 'b'}:
+                    value = self.var_replacer(value) if isinstance(value, str) else value
+                if pt in {'s', 'sr'}:
+                    args[pn] = str(value) if value is not None else None
+                elif pt in {'i', 'ir'}:
+                    args[pn] = (int(eval(str(value))) if value is not None else None) if not isinstance(value,
+                                                                                                        int) else value
+                elif pt in {'r', 'rr'}:
+                    args[pn] = (eval(str(value)) if value is not None else None) if not isinstance(value,
+                                                                                                   float) else value
+                elif pt in {'b', 'br'}:
+                    args[pn] = str(value).lower() == str(True).lower()
+
+        if self.MVAR_VARS not in args:
+            try:
+                vars = self.context[self.MVAR_VARS]
+                if isinstance(vars, JsObjectWrapper):
+                    # 确保vars为非JsObjectWrapper
+                    vars = vars.to_dict()
+                args[self.MVAR_VARS] = vars
+            except:
+                pass
+
+        return args
+
     # 变量标识替换
     def var_replacer(self, v_str, vars=None, v_prefix=r"$%", v_suffix=r"%$", re_prefix=r"\$\%", re_suffix=r"\%\$"):
         if vars is None:
-            vars = to_python(self.context[self.MVAR_VARS]).to_dict()
+            # 如未指定vars，则使用内置上下文vars
+            vars = self.context[self.MVAR_VARS]
+        if isinstance(vars, JsObjectWrapper):
+            # 确保vars为非JsObjectWrapper
+            vars = vars.to_dict()
         return self.var_replacer_raw(vars, v_str,
                                      v_prefix=v_prefix, v_suffix=v_suffix, re_prefix=re_prefix,
                                      re_suffix=re_suffix)

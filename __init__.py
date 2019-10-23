@@ -1,12 +1,11 @@
 # coding=utf-8
 
-_create_date = '2019-10-22'
-_update_date = '2019-10-22'
-__version__ = '0.1'
+__create_date__ = '2019-10-22'
+__version__ = '0.1.191023A'
 
 __author__ = 'DJun'
 __all__ = [
-    'PyJsEngine', 'PyJsEngineBase'
+    'PyJsEngine', 'PyJsEngineBase', 'get_method_name',
 ]
 
-from PyJsEngine import PyJsEngine, PyJsEngineBase
+from PyJsEngine import PyJsEngine, PyJsEngineBase, get_method_name
