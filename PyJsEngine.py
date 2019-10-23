@@ -11,6 +11,7 @@ from dateutil.relativedelta import relativedelta
 from time import strftime, strptime, time, localtime, sleep
 from copy import deepcopy
 from collections import ChainMap
+from functools import partial
 
 from jinja2 import Environment, ChoiceLoader, FileSystemLoader, Template
 
@@ -38,24 +39,18 @@ class PyJsEngine(PyJsEngineBase):
     funcn_load_vars = "load_vars"
     funcn_load_data = "load_data"
     funcn_output = "output"
-    funcn_iter_make = "iter_make"
-    funcn_iter_next = "iter_next"
     funcn_template = "template"
     funcn_call_os_cmd = "call_os_cmd"
 
     attrn_name = "name"
     attrn_src = "src"
     attrn_key = "key"
-    attrn_key_eval = "key_eval"
     attrn_value = "value"
     attrn_default_value = "defvalue"
     attrn_index = "index"
     attrn_dict_key = "dict_key"
-    attrn_key1 = "key1"
-    attrn_key2 = "key2"
     attrn_type = "type"
     attrn_cols = "cols"
-    attrn_debug = "debug"
     attrn_auto_strip = "auto_strip"
     attrn_allow_none = "allow_none"
     attrn_mode = "mode"
@@ -64,10 +59,8 @@ class PyJsEngine(PyJsEngineBase):
     attrn_content = "content"
     attrn__from_file = "_from_file"
     attrn__to_file = "_to_file"
-    attrn__to_key = "_to_key"
-    attrn__prop = "_prop"
-    attrn__args = "_args"
-    attrn__assert = "_assert"
+    attrn_cmd = "cmd"
+    attrn_args = "args"
 
     REF_KEY_PREFIX = "__"
     SUB_SPLITTER = "."
@@ -81,7 +74,7 @@ class PyJsEngine(PyJsEngineBase):
     PROC_SWITCHER_PREFIX = "!"
     PROC_SWITCHER_FLAG = "1"
 
-    MVAR_LOADED_DATA = "__data__"
+    MVAR_DATA = "__data__"
     MVAR_LOADED_DATA_COUNT = "__loaded_data_count__"
     MVAR_LOADED_DATA_ITEM_INDEX = "__loaded_data_item_index__"
     MVAR_LOADED_DATA_COLS = "__loaded_data_cols__"
@@ -123,16 +116,14 @@ class PyJsEngine(PyJsEngineBase):
             self.funcn_call: self.run_call,
             self.funcn_cond_call: self.run_cond_call,
             self.funcn_set: self.run_set,
-            self.funcn_set_int: self.run_set_with_type,
-            self.funcn_set_num: self.run_set_with_type,
-            self.funcn_set_str: self.run_set_with_type,
-            self.funcn_set_eval: self.run_set_with_type,
+            self.funcn_set_int: partial(self.run_set_with_type, funcn=self.funcn_set_int),
+            self.funcn_set_num: partial(self.run_set_with_type, funcn=self.funcn_set_num),
+            self.funcn_set_str: partial(self.run_set_with_type, funcn=self.funcn_set_str),
+            self.funcn_set_eval: partial(self.run_set_with_type, funcn=self.funcn_set_eval),
             self.funcn_get: self.run_get,
             self.funcn_load_vars: self.run_load_vars,
             self.funcn_load_data: self.run_load_data,
             self.funcn_output: self.run_output,
-            self.funcn_iter_make: self.run_iter_make,
-            self.funcn_iter_next: self.run_iter_next,
             self.funcn_template: self.run_template,
             self.funcn_call_os_cmd: self.run_call_os_cmd,
             # ---- Python functions / modules ----
@@ -148,6 +139,10 @@ class PyJsEngine(PyJsEngineBase):
             "localtime": localtime,
             "strftime": strftime,
             "strptime": strptime,
+            "iter": iter,
+            "next": next,
+            # ---- Names ----
+            "data": self.MVAR_DATA,
         })
         # self._logger.debug(msg="registered_context={}".format(repr(self._registered_context)))  # debug
 
@@ -205,9 +200,9 @@ class PyJsEngine(PyJsEngineBase):
                 dirname = os.path.dirname(dirname)
                 # os.chdir(dirname)
                 # logger.debug(msg='OS change to script''s directory (%s)' % (dirname))
-                var_dict = self._registered_context
-                var_dict[self.MVAR_SCRIPT_NAME] = os.path.splitext(base_name)[0]
-                var_dict[self.MVAR_WORKING_DIR] = dirname
+                vars = self.get_vars()
+                vars[self.MVAR_SCRIPT_NAME] = os.path.splitext(base_name)[0]
+                vars[self.MVAR_WORKING_DIR] = dirname
                 self._path.clear()
                 self.add_to_path(os.path.abspath('.'))  # 最后：程序目录
                 self.add_to_path(dirname)  # 倒数第二：脚本目录
@@ -230,64 +225,32 @@ class PyJsEngine(PyJsEngineBase):
 
     # 生成调试信息
     def generate_debug_info(self, tag, args):
-        var_dict = args.var_dict
+        vars = self.get_vars()
         _debug = None
         try:
             _debug = "[{}] TAG: {}({}) | Traceback: {}".format(strftime("%Y-%m-%d %H:%M:%S"), tag.name, repr(tag.attrs),
                                                                str(tb.format_exc()).replace('\n', ' '))
         except:
             _debug = "[{}] TAG: {}({})".format(strftime("%Y-%m-%d %H:%M:%S"), tag.name, repr(tag.attrs))
-        var_dict[self.MVAR_DEBUG] = _debug
-
-        # 改在generate_log_datetime()中实现
-        # var_dict[self.MVAR_LOG_DATETIME] = strftime("%Y-%m-%d %H:%M:%S")
+        vars[self.MVAR_DEBUG] = _debug
 
         return _debug
 
-    # 生成日志时间
+    # 生成日志时间  # TODO 需要在调用功能前先被调用！另，需要重新考究一下所有run_*()方法的返回值
     def generate_log_datetime(self, tag, args):
         _log_datetime = strftime("%Y-%m-%d %H:%M:%S")
-        var_dict = args.var_dict
-        var_dict[self.MVAR_LOG_DATETIME] = _log_datetime
+        vars = self.get_vars()
+        vars[self.MVAR_LOG_DATETIME] = _log_datetime
 
         return _log_datetime
 
-    # 生成层号
-    def generate_depth(self, tag, args, depth):
-        _depth = depth
-        var_dict = args.var_dict
-        var_dict[self.MVAR_DEPTH] = _depth
-
-        return _depth
-
-    # TODO 待改造
-    # def execute_tag(self, jskwargs, *args):
-    #     logger = self._logger
-    #     # 写入日志时间
-    #     self.generate_log_datetime(tag, args)
-    #     # 写入depth信息到变量
-    #     self.generate_depth(tag, args, depth)
-    #     # 执行原来的execute_tag()操作，但加入了depth信息
-    #     # 2019-3-20：新增优先执行callable对象的标签名，如找不到，则执行runner
-    #     callable_names_set = self._callable_names_set
-    #     runners = self._tag_runners_map
-    #     if isinstance(tag, self.TagItem):
-    #         tagn = tag.name
-    #         funcn_key = tag.name.split(self.SUB_SPLITTER)[0]
-    #         if tagn.startswith(self.REF_KEY_PREFIX):
-    #             logger.debug(msg="run_key_call -> {}".format(tagn))  # debug
-    #             return self.run_key_call(tag, args, depth)
-    #         else:
-    #             if tagn in callable_names_set or funcn_key in callable_names_set:
-    #                 logger.debug(msg="run_internal_call -> {}".format(tagn))  # debug
-    #                 return self.run_internal_call(tag, args, depth)
-    #             else:
-    #                 runner = runners.get(tagn)
-    #                 if runner is not None:
-    #                     return runner(tag, args, depth)
-    #                 else:
-    #                     logger.debug(msg="runner not found! ({})".format(tagn))  # debug
-    # return None
+    # 将参数中的data字典跟context上下文中的vars字典串联起来
+    def get_chain_vars_dict(self, jargs=None):
+        jargs = jargs if isinstance(jargs, dict) else {}
+        vars = self.get_vars_dict()
+        data = jargs.get(self.MVAR_DATA, {})
+        vars_dict = ChainMap(data, vars)
+        return vars_dict
 
     # 操作：子程序（跟根节点执行的处理一样，其他处理可能不同，所以从root复制过来另外写）
     def run_sub(self, jskwargs, *args):
@@ -338,29 +301,19 @@ class PyJsEngine(PyJsEngineBase):
                 return not (_value is None or _value == 0 or _value == '' or str(_value).lower() == str(False).lower())
 
         try:
-            var_dict = args.var_dict
+            vars_dict = self.get_vars_dict()
             _value = None
             if isinstance(key, str) and key != '':
                 # 检查变量值
-                _value = self.engine_get_var(var_dict, key)
-            elif len(tagc) > 0:
-                # 检查内容标签
-                # 只要有False即返回False，全检查通过则返回True（and关系）
-                for c in tagc:
-                    if isinstance(c, self.TagItem):
-                        _value = self.execute_tag(c, args, depth + 1)
-                        logger.debug("[PyJsEngine]<{}>: assert value in sub-tag: {} (with value: {})".format(
-                            get_method_name(),
-                            repr(_value),
-                            repr(value)))
-                        if not my_assert(_value, value):
-                            return False
-                return True
+                _value = vars_dict.get(key)
             else:
-                raise ValueError("assert type illegal!")
+                _value = args[0]()
+                if not my_assert(_value, value):
+                    return False
+                return True
             logger.debug(
-                "[PyJsEngine]<{}>: assert value: {} (with value: {})".format(get_method_name(),
-                                                                             repr(_value), repr(value)))
+                "[PyJsEngine]<{}>: assert value: {} (compare with value: {})".format(get_method_name(),
+                                                                                     repr(_value), repr(value)))
 
             return my_assert(_value, value)
         except Exception as e:
@@ -393,30 +346,19 @@ class PyJsEngine(PyJsEngineBase):
                 return _value is None or _value == 0 or _value == '' or str(_value).lower() == str(False).lower()
 
         try:
-            var_dict = args.var_dict
+            vars_dict = self.get_vars_dict()
             _value = None
             if isinstance(key, str) and key != '':
                 # 检查变量值
-                _value = self.engine_get_var(var_dict, key)
-            elif len(tagc) > 0:
-                # 检查内容标签
-                # 只要有True即返回True，全检查不通过则返回False（or关系）
-                for c in tagc:
-                    if isinstance(c, self.TagItem):
-                        _value = self.execute_tag(c, args, depth + 1)
-                        logger.debug(
-                            "[PyJsEngine]<{}>: assert value in sub-tag: {} (with value: {})".format(
-                                get_method_name(),
-                                repr(_value),
-                                repr(value)))
-                        if my_assert_not(_value, value):
-                            return True
-                return False
+                _value = vars_dict.get(key)
             else:
-                raise ValueError("assert type illegal!")
+                _value = args[0]()
+                if not my_assert_not(_value, value):
+                    return False
+                return True
             logger.debug(
-                "[PyJsEngine]<{}>: assert value: {} (with value: {})".format(get_method_name(),
-                                                                             repr(_value), repr(value)))
+                "[PyJsEngine]<{}>: assert value: {} (compare with value: {})".format(get_method_name(),
+                                                                                     repr(_value), repr(value)))
 
             return my_assert_not(_value, value)
         except Exception as e:
@@ -441,19 +383,12 @@ class PyJsEngine(PyJsEngineBase):
                     if os.path.exists(nsrc):
                         src = nsrc
                         break
-            # global_var_dict = self._global_var_dict
-            # working_dir = global_var_dict.get(self.MVAR_WORKING_DIR)
-            # if working_dir:
-            #     src = os.path.join(working_dir, src)
         except:
             pass
 
         # 处理
         try:
-            script_type = self.get_script_type(src)
-            logger.debug(msg="[PyJsEngine]<{}>: src={}, script_type={}".format(get_method_name(),
-                                                                               repr(src), repr(script_type)))
-            self.load_from_file(src, script_type=script_type, load_as_module=True)
+            self.load_from_file(src, load_as_module=True)
             return True
         except Exception as e:
             self.internal_exception_handler(funcn=get_method_name(), jskwargs=jskwargs, args=args, e=e)
@@ -506,13 +441,11 @@ class PyJsEngine(PyJsEngineBase):
                 if func is not None:
                     logger.debug(msg="[PyJsEngine]<{}>: proc_name={} found!".format(get_method_name(), repr(proc_name)))
 
-                    # TODO
-                    # 2018-10-27新增：把本标签非关键属性的属性作为自定义属性，将属性值导入脚本变量中，这样call传参用起来会更方便！
-                    new_var_dict = new_args.var_dict
-                    for k, v in taga.items():
-                        if k not in {self.attrn_name}:
-                            v = self.engine_var_replacer(new_var_dict, v) if v is not None else None
-                            new_var_dict[k] = v
+                    # 传递参数至要call的procedure
+                    new_jargs = deepcopy(jargs)
+                    for k in {self.attrn_name}:
+                        if k in new_jargs:
+                            new_jargs.pop(k)
 
                     # 进入procedure子标签调用
                     return func(jskwargs, *args)
@@ -536,14 +469,14 @@ class PyJsEngine(PyJsEngineBase):
 
         # 处理
         try:
+            vars_dict = self.get_chain_vars_dict(jargs)
             # proc_dict = self._proc_dict
             if isinstance(proc_name, str) and proc_name != '':
-                var_dict = args.var_dict
-                proc_switcher = var_dict.get(self.PROC_SWITCHER_PREFIX + proc_name)
+                proc_switcher = vars_dict.get(self.PROC_SWITCHER_PREFIX + proc_name)
                 proc_switcher = str(proc_switcher) if proc_switcher is not None else None
                 if proc_switcher == self.PROC_SWITCHER_FLAG:
                     # 直接调用原run_call()方法
-                    self.run_call(tag, args, depth=depth)
+                    self.run_call(jskwargs, *args)
             else:
                 raise ValueError("proc_name={} name illegal!".format(repr(proc_name)))
         except Exception as e:
@@ -559,7 +492,6 @@ class PyJsEngine(PyJsEngineBase):
             self.attrn_key: ('key', 's', None),
             self.attrn__from_file: ('_from_file', 's', None),
             self.attrn__to_file: ('_to_file', 's', None),
-            self.attrn__to_key: ('_to_key', 's', None),
             self.attrn_content: ('content', 's', None),
             self.attrn_encoding: ('encoding', 's', None),
         })
@@ -572,12 +504,12 @@ class PyJsEngine(PyJsEngineBase):
 
         # 处理
         try:
-            var_dict = args.var_dict
+            vars_dict = self.get_chain_vars_dict(jargs)
             fp = None
             template_str = None
             template = None
             if isinstance(key, str) and key != '':
-                template_str = self.engine_get_var(var_dict, key)
+                template_str = self.engine_get_var(vars_dict, key)
             elif isinstance(content, str):
                 template_str = content
             elif _from_file is not None:
@@ -609,20 +541,15 @@ class PyJsEngine(PyJsEngineBase):
                 logger.debug("[PyJsEngine]<{}>: template_str={}".format(get_method_name(), repr(template_str)))
                 template = Template(template_str)
 
-            global_var_dict = self._global_var_dict
-            chain_var_dict = ChainMap(var_dict, global_var_dict)
-            template_render_result = template.render(**chain_var_dict)
+            chain_vars_dict = self.get_chain_vars_dict(jargs)
+            template_render_result = template.render(**chain_vars_dict)
             # logger.debug("[PyJsEngine]<{}>: template_render_result={}".format(get_method_name(), repr(template_render_result)))
             logger.debug("[PyJsEngine]<{}>: len(template_render_result)={}".format(
                 get_method_name(),
                 len(template_render_result) if template_render_result is not None else -1))
 
             # 输出
-            if isinstance(_to_key, str) and _to_key != '':
-                var_dict[_to_key] = template_render_result
-                logger.debug("[PyJsEngine]<{}>: save to key {}".format(get_method_name(), repr(_to_key)))
-                return True
-            elif _to_file is not None:
+            if _to_file is not None:
                 # 支持引用io变量，故在此不限制它是str类型！
                 to_real_file = False
                 if isinstance(_to_file, str):
@@ -635,11 +562,11 @@ class PyJsEngine(PyJsEngineBase):
                 finally:
                     if to_real_file:
                         fp.close()
-                return True
+                # return True
             return template_render_result
         except Exception as e:
             self.internal_exception_handler(funcn=get_method_name(), jskwargs=jskwargs, args=args, e=e)
-            return False
+            return null
 
     # 操作：定义变量
     def run_set(self, jskwargs, *args):
@@ -657,32 +584,18 @@ class PyJsEngine(PyJsEngineBase):
 
         # 处理
         try:
-            # TODO
-            global_var_dict = self._global_var_dict
-            local_var_dict = args.var_dict
+            vars = self.get_vars()
             if isinstance(key, str) and key != '':
                 logger.debug(
                     "[PyJsEngine]<{}>: setting {}({})...".format(get_method_name(), repr(key), repr(set_type)))
                 if set_type == self.SET_TYPE_OBJECT:
-                    if len(tagc) > 0 and isinstance(tagc[0], self.TagItem):
-                        value = self.execute_tag(tagc[0], args, depth + 1)
-                        if global_:
-                            global_var_dict[key] = value
-                        else:
-                            local_var_dict[key] = value
-                    else:
-                        raise ValueError("tag content illegal!")
+                    value = args[0]()
+                    vars[key] = value
                 elif set_type == self.SET_TYPE_EVAL:
                     value = eval(value)
-                    if global_:
-                        global_var_dict[key] = value
-                    else:
-                        local_var_dict[key] = value
+                    vars[key] = value
                 elif set_type == self.SET_TYPE_VALUE:
-                    if global_:
-                        global_var_dict[key] = value
-                    else:
-                        local_var_dict[key] = value
+                    vars[key] = value
                 else:
                     raise ValueError("set_type illegal!")
                 logger.debug("[PyJsEngine]<{}>: value={}, type(value)={}".format(get_method_name(),
@@ -695,35 +608,37 @@ class PyJsEngine(PyJsEngineBase):
             return False
 
     # 操作：定义变量（带类型）
-    def run_set_with_type(self, jskwargs, *args):
+    def run_set_with_type(self, jskwargs, *args, funcn=None):
         logger = self._logger
 
         # 属性
-        # pass
+        jargs = self.args_parser_all(jskwargs)
 
         # 处理
         try:
-            var_dict = args.var_dict
+            vars = self.get_vars()
             tmp_dict = {}
-            for k, v in taga.items():
-                if tagn in {self.funcn_set_int, self.funcn_set_num, self.funcn_set_str, }:
-                    v = self.engine_var_replacer(var_dict, v) if v is not None else None
-                    if tagn == self.funcn_set_int:
+            for k, v in jargs.items():
+                if funcn in {self.funcn_set_int, self.funcn_set_num, self.funcn_set_str, }:
+                    v = self.var_replacer(v, vars=vars) if v is not None else None
+                    if funcn == self.funcn_set_int:
                         try:
                             v = int(v)
                         except ValueError:
                             v = int(float(v))
-                    elif tagn == self.funcn_set_num:
+                    elif funcn == self.funcn_set_num:
                         v = float(v)
-                    elif tagn == self.funcn_set_str:
+                    elif funcn == self.funcn_set_str:
                         v = str(v)
-                elif tagn in {self.funcn_set_eval}:
+                elif funcn in {self.funcn_set_eval}:
                     v = eval(v)
                 else:
                     raise RuntimeError()
                 tmp_dict[k] = v
                 logger.debug("[PyJsEngine]<{}>: preparing {} = {} ...".format(get_method_name(), repr(k), repr(v)))
-            var_dict.update(tmp_dict)  # 检查到全部变量定义不存在问题，才执行update进行更新
+            # 检查到全部变量定义不存在问题，才执行update进行更新
+            for k, v in tmp_dict.items():
+                vars[k] = v
 
             return True
         except Exception as e:
@@ -738,8 +653,8 @@ class PyJsEngine(PyJsEngineBase):
         jargs = self.args_parser(jskwargs, {
             self.attrn_key: ('key', 's', None),
             self.attrn_default_value: ('defvalue', 's', None),
-            self.attrn_index: ('index', 's', None),
-            self.attrn_dict_key: ('dict_key', 's', None)
+            # self.attrn_index: ('index', 's', None),
+            # self.attrn_dict_key: ('dict_key', 's', None)
         })
         key = (jargs['key'] or '').strip()
         defvalue = jargs['defvalue']
@@ -748,19 +663,22 @@ class PyJsEngine(PyJsEngineBase):
 
         # 处理
         try:
-            var_dict = args.var_dict
+            chain_vars_dict = self.get_chain_vars_dict(jargs=jargs)
+            # vars_dict = self.get_vars_dict()
             if isinstance(key, str) and key != '':
                 logger.debug(
                     "[PyJsEngine]<{}>: getting {}...".format(get_method_name(), repr(key)))
-                value = self.engine_get_var(var_dict, key, default=defvalue)
+                value = chain_vars_dict.get(key, default=defvalue)
+                # value = vars_dict.get(key, default=defvalue)
                 logger.debug("[PyJsEngine]<{}>: value={}, type(value)={}".format(get_method_name(),
                                                                                  repr(value), repr(type(value))))
-                if dict_key:
-                    return value.get(dict_key, defvalue)
-                elif index:
-                    return value[int(index)] or defvalue
-                else:
-                    return value
+                # if dict_key:
+                #     return value.get(dict_key, defvalue)
+                # elif index:
+                #     return value[int(index)] or defvalue
+                # else:
+                #     return value
+                return value
             elif defvalue is not None:
                 return defvalue
             else:
@@ -807,16 +725,12 @@ class PyJsEngine(PyJsEngineBase):
                 if os.path.exists(n_file_name):
                     file_name = n_file_name
                     break
-
-            # global_var_dict = self._global_var_dict
-            # working_dir = global_var_dict.get(self.MVAR_WORKING_DIR)
-            # if working_dir:
-            #     file_name = os.path.join(working_dir, file_name)
         except:
             pass
 
         # 处理
         try:
+            vars = self.get_vars()
             logger.debug(msg="[PyJsEngine]<{}>: loading vars started! ({})".format(get_method_name(), file_name))
             if isinstance(file_name, str) and file_name != '':
                 if file_type == self.FILE_TYPE_CSV:
@@ -854,7 +768,7 @@ class PyJsEngine(PyJsEngineBase):
                                     var_value = var_value.strip()
 
                             # 存入变量字典
-                            args.var_dict[var_name] = var_value
+                            vars[var_name] = var_value
                             logger.info(
                                 msg="[PyJsEngine]<{}>: var stored! ({} -> {}) ({})".format(
                                     get_method_name(),
@@ -1047,9 +961,9 @@ class PyJsEngine(PyJsEngineBase):
             logger.debug(msg="[PyJsEngine]<{}>: output started!".format(get_method_name()))
             if isinstance(file_name, str) and file_name != '':
                 with self.get_output_lock(file_name):
-                    if len(tagc) > 0 and isinstance(tagc[0], self.TagItem):
+                    if len(args) > 0:
                         # 子标签第1个标签返回的结果作为文件数据写入到文件（无视输出文件类型）
-                        data = self.execute_tag(tagc[0], args, depth + 1)
+                        data = args[0]()
                         try:
                             self.write_data_to_file(file_name=file_name, data=data,
                                                     binary_data=isinstance(data, bytes),
@@ -1073,12 +987,11 @@ class PyJsEngine(PyJsEngineBase):
                                         cdw.writeheader()
 
                                     # 写入数据
-                                    var_dict = args.var_dict
+                                    chain_vars_dict = self.get_chain_vars_dict(jargs)
                                     row = {}
                                     for c in cols:
                                         # 改成取连同全局变量在内的变量
-                                        row[c] = self.engine_get_var(var_dict, c)
-                                        # row[c] = var_dict.get(c, None)
+                                        row[c] = chain_vars_dict.get(c)
                                     cdw.writerow(row)
                                     logger.info(msg="[PyJsEngine]<{}>: row written!".format(get_method_name()))
                                 except Exception as e:
@@ -1095,70 +1008,6 @@ class PyJsEngine(PyJsEngineBase):
                 raise ValueError("file name illegal!")
             logger.debug(msg="[PyJsEngine]<{}>: output finished!".format(get_method_name()))
             return True
-        except Exception as e:
-            self.internal_exception_handler(funcn=get_method_name(), jskwargs=jskwargs, args=args, e=e)
-            return False
-
-    # 操作：迭代生成
-    def run_iter_make(self, jskwargs, *args):
-        logger = self._logger
-
-        # 属性
-        jargs = self.args_parser(jskwargs, {
-            self.attrn_key: ('key', 's', None),
-            self.attrn_src: ('src_key', 's', None)
-        })
-        key = (jargs['key'] or '').strip()
-        src_key = (jargs['src_key'] or '').strip()
-
-        # 处理   # TODO testing
-        try:
-            var_dict = args.var_dict
-            if isinstance(key, str) and key != '':
-                if isinstance(src_key, str) and src_key != '':
-                    value = self.engine_get_var(var_dict, src_key)
-                    result = None
-                    try:
-                        result = iter(value)
-                    except:
-                        raise ValueError("source value not iterable!")
-                    var_dict[key] = result
-                    logger.debug("[PyJsEngine]<{}>: type(result)={}".format(get_method_name(), repr(type(result))))
-                    return True
-                else:
-                    raise ValueError("source key name illegal!")
-            else:
-                raise ValueError("key name illegal!")
-        except Exception as e:
-            self.internal_exception_handler(funcn=get_method_name(), jskwargs=jskwargs, args=args, e=e)
-            return False
-
-    # 操作：迭代下项
-    def run_iter_next(self, jskwargs, *args):
-        logger = self._logger
-
-        # 属性
-        jargs = self.args_parser(jskwargs, {
-            self.attrn_key: ('key', 's', None)
-        })
-        key = (jargs['key'] or '').strip()
-
-        # 处理   # TODO testing
-        try:
-            var_dict = args.var_dict
-            if isinstance(key, str) and key != '':
-                value = self.engine_get_var(var_dict, key)
-                result = None
-                try:
-                    result = next(value)
-                except StopIteration:
-                    return True
-                except:
-                    raise ValueError("value not iterable!")
-                logger.debug("[PyJsEngine]<{}>: type(result)={}".format(get_method_name(), repr(type(result))))
-                return result
-            else:
-                raise ValueError("key name illegal!")
         except Exception as e:
             self.internal_exception_handler(funcn=get_method_name(), jskwargs=jskwargs, args=args, e=e)
             return False
@@ -1195,7 +1044,7 @@ class PyJsEngine(PyJsEngineBase):
                     repr(os_cmd), repr(os_args)))
                 logger.info(msg="-" * 36)
                 status, msgs = self.subprocess_popen(os_cmd + ((" " + os_args) if os_args != '' else ""),
-                                                     cwd=self._path[0])
+                                                     cwd=(self._path[0] if len(self._path) > 0 else None))
                 logger.info(msg="".join(msgs))
                 logger.info(msg="-" * 36)
                 logger.info(msg="[PyJsEngine]<{}>: status <{}>".format(get_method_name(), repr(status)))
@@ -1207,3 +1056,12 @@ class PyJsEngine(PyJsEngineBase):
         except Exception as e:
             self.internal_exception_handler(funcn=get_method_name(), jskwargs=jskwargs, args=args, e=e)
             return False
+
+
+if __name__ == "__main__":
+    engine = PyJsEngine()
+    engine.run(temp_script=r"""
+        console.log("test");
+        var data_list = Load_data({ name: "C:\\\\temp\\\\test.csv", encoding: "gbk" })
+        console.log(data_list);
+    """)

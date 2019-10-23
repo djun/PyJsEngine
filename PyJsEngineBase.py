@@ -80,6 +80,7 @@ class PyJsEngineBase:
         with self._context_lock:
             if self._context is None:
                 registered_context = self._registered_context
+                registered_context[self.MVAR_VARS] = {}
                 self._context = EvalJs(context=registered_context, enable_require=True)
 
     # 加载脚本
@@ -160,17 +161,37 @@ class PyJsEngineBase:
             script = self._script
 
         self.create_js_context()
-        self._context.execute(script)
+        self.context.execute(script)
+
+    def get_vars(self):
+        return self.context[self.MVAR_VARS]
+
+    def get_vars_dict(self, vars=None):
+        if vars is None:
+            # 如未指定vars，则使用内置上下文vars
+            vars = self.get_vars()
+        if isinstance(vars, JsObjectWrapper):
+            # 确保vars为非JsObjectWrapper
+            vars = vars.to_dict()
+        return vars
+
+    # 解析参数字典（所有参数；仅做类型转换）
+    @staticmethod
+    def args_parser_all(jskwargs):
+        return jskwargs.to_dict() if isinstance(jskwargs, JsObjectWrapper) else jskwargs
 
     # 解析参数字典，按规则规范参数格式及赋予默认值
     # jskwargs Js传递的参数字典，rules 解析规则字典（格式：{key:(name, type, default)}，type有 s字串/sr原始字串/i整数/r实数/b布尔 ）
     def args_parser(self, jskwargs, rules):
-        if jskwargs is None or rules is None:
+        if not isinstance(rules, dict):
             return None
 
         if isinstance(jskwargs, JsObjectWrapper):
             # 确保jskwargs为非JsObjectWrapper
             jskwargs = jskwargs.to_dict()
+
+        if not isinstance(jskwargs, dict):
+            return None
 
         args = {}
         keys = set(jskwargs.keys())
@@ -204,11 +225,7 @@ class PyJsEngineBase:
 
         if self.MVAR_VARS not in args:
             try:
-                vars = self.context[self.MVAR_VARS]
-                if isinstance(vars, JsObjectWrapper):
-                    # 确保vars为非JsObjectWrapper
-                    vars = vars.to_dict()
-                args[self.MVAR_VARS] = vars
+                args[self.MVAR_VARS] = self.get_vars_dict()
             except:
                 pass
 
@@ -216,12 +233,7 @@ class PyJsEngineBase:
 
     # 变量标识替换
     def var_replacer(self, v_str, vars=None, v_prefix=r"$%", v_suffix=r"%$", re_prefix=r"\$\%", re_suffix=r"\%\$"):
-        if vars is None:
-            # 如未指定vars，则使用内置上下文vars
-            vars = self.context[self.MVAR_VARS]
-        if isinstance(vars, JsObjectWrapper):
-            # 确保vars为非JsObjectWrapper
-            vars = vars.to_dict()
+        vars = self.get_vars_dict(vars=vars)
         return self.var_replacer_raw(vars, v_str,
                                      v_prefix=v_prefix, v_suffix=v_suffix, re_prefix=re_prefix,
                                      re_suffix=re_suffix)
