@@ -6,12 +6,12 @@ import types
 import chardet as crd
 import codecs as cdc
 import re
+from functools import partial
 from copy import deepcopy, copy
 from threading import Lock
-from functools import partial
 
 from js2py import EvalJs
-from js2py.base import to_python, JsObjectWrapper
+from js2py.base import JsObjectWrapper
 
 from MiniUtils import *
 
@@ -37,6 +37,7 @@ class PyJsEngineBase:
 
         self._script = None
         self._registered_context = {}
+        self._prepare_script = []
         self._path = list()
 
         self._context = None
@@ -95,6 +96,14 @@ class PyJsEngineBase:
                     new_k = k.capitalize()
                     self._registered_context[new_k] = v
 
+    # 清除预备脚本列表
+    def clear_prepare_script(self):
+        self._prepare_script.clear()
+
+    # 往预备脚本列表添加要预执行的脚本
+    def append_prepare_script(self, script):
+        self._prepare_script.append(script)
+
     # 创建JS上下文对象
     def create_js_context(self):
         with self._context_lock:
@@ -102,6 +111,9 @@ class PyJsEngineBase:
                 registered_context = self._registered_context
                 registered_context[self.MVAR_VARS] = {}
                 self._context = EvalJs(context=registered_context, enable_require=True)
+                if self._prepare_script:
+                    for script in self._prepare_script:
+                        self._context.execute(script)
 
     # 加载脚本
     def load(self, script):

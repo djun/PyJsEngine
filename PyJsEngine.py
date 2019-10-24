@@ -1,24 +1,24 @@
 # coding=utf-8
 
 
+import traceback as tb
 import subprocess
 import types
-import traceback as tb
 import csv
+from functools import partial
 from threading import Lock
 from datetime import datetime, timezone
 from dateutil.relativedelta import relativedelta
 from time import strftime, strptime, time, localtime, sleep
 from copy import deepcopy
-from collections import ChainMap
-from functools import partial
+# from collections import ChainMap
 
 from jinja2 import Environment, ChoiceLoader, FileSystemLoader, Template
 
 from PyJsEngineBase import PyJsEngineBase, get_method_name
 from MiniUtils import *
 
-__version__ = "1.0.191023"
+__version__ = "1.0.191024"
 
 
 class PyJsEngine(PyJsEngineBase):
@@ -74,12 +74,23 @@ class PyJsEngine(PyJsEngineBase):
     PROC_SWITCHER_PREFIX = "!"
     PROC_SWITCHER_FLAG = "1"
 
-    MVAR_DATA = "__data__"
     MVAR_LOADED_DATA_COUNT = "__loaded_data_count__"
     MVAR_LOADED_DATA_ITEM_INDEX = "__loaded_data_item_index__"
     MVAR_LOADED_DATA_COLS = "__loaded_data_cols__"
     MVAR_DEPTH = "__depth__"
     MVAR_LOG_DATETIME = "__log_datetime__"
+
+    PREPARE_SCRIPT_MAIN = r"""
+        function Next_(iterator) {
+            var i;
+            try {
+                i = Next(it);
+            } catch (e){
+                i = null;
+            }
+            return i;
+        }
+    """
 
     def __init__(self, logger=None, msg_handler=None):
         # 父类初始化
@@ -146,10 +157,9 @@ class PyJsEngine(PyJsEngineBase):
             "strptime": strptime,
             "iter": iter,
             "next": next,
-            # ---- Names ----
-            "data": self.MVAR_DATA,
         })
         # self._logger.debug(msg="registered_context={}".format(repr(self._registered_context)))  # debug
+        self.append_prepare_script(self.PREPARE_SCRIPT_MAIN)
 
         self._logger.debug(msg="PyJsEngine loaded. ({})".format(__version__))
 
@@ -260,14 +270,9 @@ class PyJsEngine(PyJsEngineBase):
 
     # 生成load_data进度
     def generate_load_data_progress(self, jskwargs, *args):
-        # jargs = self.args_parser(jskwargs, {
-        #     self.MVAR_LOADED_DATA_ITEM_INDEX: (self.MVAR_LOADED_DATA_ITEM_INDEX, "i", 0),
-        #     self.MVAR_LOADED_DATA_COUNT: (self.MVAR_LOADED_DATA_COUNT, "i", 0),
-        # })
-        # chain_vars_dict = self.get_chain_vars_dict(jargs=jargs)
-        chain_vars_dict = vars_dict = self.get_vars_dict()
-        _index = chain_vars_dict.get(self.MVAR_LOADED_DATA_ITEM_INDEX, 0)
-        _count = chain_vars_dict.get(self.MVAR_LOADED_DATA_COUNT, 0)
+        vars_dict = self.get_vars_dict()
+        _index = vars_dict.get(self.MVAR_LOADED_DATA_ITEM_INDEX, 0)
+        _count = vars_dict.get(self.MVAR_LOADED_DATA_COUNT, 0)
         try:
             if int(_count) > 0:
                 return str(_index) + '/' + str(_count)
@@ -289,14 +294,6 @@ class PyJsEngine(PyJsEngineBase):
             progress = self.generate_load_data_progress(jskwargs, *args)
             msg = (('(' + progress + ') ') if progress else '') + msg
             self.send_msg_to_handler(msg)
-
-    # 将参数中的data字典跟context上下文中的vars字典串联起来
-    def get_chain_vars_dict(self, jargs=None):
-        jargs = jargs if isinstance(jargs, dict) else {}  # TODO 有bug，看能否兼容JsObjectWrapper，以及直接取出MVAR_DATA键的值
-        vars = self.get_vars_dict()
-        data = jargs.get(self.MVAR_DATA, {})
-        vars_dict = ChainMap(data, vars)
-        return vars_dict
 
     def args_parser(self, jskwargs, rules):
         if isinstance(jskwargs, str):
@@ -525,7 +522,7 @@ class PyJsEngine(PyJsEngineBase):
 
         # 处理
         try:
-            vars_dict = self.get_chain_vars_dict(jargs=jargs)
+            vars_dict = self.get_vars_dict()
             # proc_dict = self._proc_dict
             if isinstance(proc_name, str) and proc_name != '':
                 proc_switcher = vars_dict.get(self.PROC_SWITCHER_PREFIX + proc_name)
@@ -559,7 +556,7 @@ class PyJsEngine(PyJsEngineBase):
 
         # 处理
         try:
-            vars_dict = self.get_chain_vars_dict(jargs=jargs)
+            vars_dict = self.get_vars_dict()
             fp = None
             template_str = None
             template = None
@@ -596,8 +593,8 @@ class PyJsEngine(PyJsEngineBase):
                 logger.debug("[PyJsEngine]<{}>: template_str={}".format(get_method_name(), repr(template_str)))
                 template = Template(template_str)
 
-            chain_vars_dict = self.get_chain_vars_dict(jargs=jargs)
-            template_render_result = template.render(**chain_vars_dict)
+            vars_dict = self.get_vars_dict()
+            template_render_result = template.render(**vars_dict)
             # logger.debug("[PyJsEngine]<{}>: template_render_result={}".format(get_method_name(), repr(template_render_result)))
             logger.debug("[PyJsEngine]<{}>: len(template_render_result)={}".format(
                 get_method_name(),
@@ -709,13 +706,12 @@ class PyJsEngine(PyJsEngineBase):
 
         # 处理
         try:
-            chain_vars_dict = self.get_chain_vars_dict(jargs=jargs)
+            vars_dict = self.get_vars_dict()
             # vars_dict = self.get_vars_dict()
             if isinstance(key, str) and key != '':
                 logger.debug(
                     "[PyJsEngine]<{}>: getting {}...".format(get_method_name(), repr(key)))
-                value = chain_vars_dict.get(key, default=defvalue)
-                # value = vars_dict.get(key, default=defvalue)
+                value = vars_dict.get(key, defvalue)
                 logger.debug("[PyJsEngine]<{}>: value={}, type(value)={}".format(get_method_name(),
                                                                                  repr(value), repr(type(value))))
 
@@ -937,7 +933,7 @@ class PyJsEngine(PyJsEngineBase):
                     new_data_list.append(d)
 
                 logger.info(msg="[PyJsEngine]<{}>: loading data finished! ({})".format(get_method_name(), file_name))
-                return new_data_list
+                return iter(new_data_list)
             else:
                 raise ValueError("file name illegal!")
         except Exception as e:
@@ -1024,11 +1020,11 @@ class PyJsEngine(PyJsEngineBase):
                                         cdw.writeheader()
 
                                     # 写入数据
-                                    chain_vars_dict = self.get_chain_vars_dict(jargs=jargs)
+                                    vars_dict = self.get_vars_dict()
                                     row = {}
                                     for c in cols:
                                         # 改成取连同全局变量在内的变量
-                                        row[c] = chain_vars_dict.get(c)
+                                        row[c] = vars_dict.get(c)
                                     cdw.writerow(row)
                                     logger.info(msg="[PyJsEngine]<{}>: row written!".format(get_method_name()))
                                 except Exception as e:
@@ -1095,16 +1091,11 @@ class PyJsEngine(PyJsEngineBase):
 if __name__ == "__main__":
     engine = PyJsEngine()
     engine.run(temp_script=r"""
-        console.log("test");
-        var data_list = Load_data({ name: "C:\\temp\\test.csv", encoding: "gbk", msg: "加载文件...", })
-        // console.log(data_list);
-        for (var i in data_list){
-            // console.log("ind: " + String(i));
-            var obj = data_list[i];
-            // console.log(obj);
-            Set_str(obj);
-            // console.log(Get("PassengerId"));
-            // console.log(Get("Name"));
-            Msg(Get("Name"));
+        console.log("Python + Js2Py");
+        var it = Load_data({ name: "C:\\temp\\test.csv", encoding: "gbk", msg: "Loading csv file...", })
+        for (var i = Next_(it); i; ){
+            Set_str(i);
+            Msg(Get("PassengerId") + ", " + Get("Name"));
+            i = Next_(it);
         }
     """)
