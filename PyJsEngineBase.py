@@ -32,7 +32,7 @@ class PyJsEngineBase:
     MVAR_SCRIPT_NAME = "__script_name__"
     MVAR_WORKING_DIR = "__working_dir__"
 
-    def __init__(self, logger=None):
+    def __init__(self, logger=None, **kwargs):
         self._logger = logger or get_logger()
 
         self._script = None

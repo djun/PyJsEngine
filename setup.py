@@ -37,5 +37,6 @@ setup(
     install_requires=[
         'js2py',
         'jinja2',
+        'requests',
     ],
 )

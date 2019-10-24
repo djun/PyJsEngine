@@ -77,7 +77,6 @@ class PyJsEngine(PyJsEngineBase):
     MVAR_LOADED_DATA_COUNT = "__loaded_data_count__"
     MVAR_LOADED_DATA_ITEM_INDEX = "__loaded_data_item_index__"
     MVAR_LOADED_DATA_COLS = "__loaded_data_cols__"
-    MVAR_DEPTH = "__depth__"
     MVAR_LOG_DATETIME = "__log_datetime__"
 
     PREPARE_SCRIPT_MAIN = r"""
@@ -92,15 +91,14 @@ class PyJsEngine(PyJsEngineBase):
         }
     """
 
-    def __init__(self, logger=None, msg_handler=None):
+    def __init__(self, logger=None, msg_handler=None, **kwargs):
         # 父类初始化
-        super().__init__(logger)
+        super().__init__(logger=None, msg_handler=None, **kwargs)
         # 更新MVAR集合
         self.MVAR_SET.update({
             self.MVAR_LOADED_DATA_COUNT,
             self.MVAR_LOADED_DATA_ITEM_INDEX,
             self.MVAR_LOADED_DATA_COLS,
-            self.MVAR_DEPTH,
             self.MVAR_LOG_DATETIME,
         })
         # 用于存放过程
@@ -1096,6 +1094,11 @@ if __name__ == "__main__":
         for (var i = Next_(it); i; ){
             Set_str(i);
             Msg(Get("PassengerId") + ", " + Get("Name"));
+            Output({
+                name: "C:\\temp\\test_output.csv",
+                encoding: "gbk",
+                cols: "$%__loaded_data_cols__%$"
+            });
             i = Next_(it);
         }
     """)
