@@ -2,11 +2,13 @@
 
 
 import inspect
+import types
 import chardet as crd
 import codecs as cdc
 import re
-from copy import deepcopy
+from copy import deepcopy, copy
 from threading import Lock
+from functools import partial
 
 from js2py import EvalJs
 from js2py.base import to_python, JsObjectWrapper
@@ -62,10 +64,28 @@ class PyJsEngineBase:
         with self._context_lock:
             return self._context
 
+    def do_before(self, jskwargs, *args):
+        pass
+
+    def do_after(self, jskwargs, *args):
+        pass
+
+    def wrapped_method(self, jskwargs, *args, func=None):
+        self.do_before(jskwargs, *args)
+        result = None
+        if func is not None:
+            result = func(jskwargs, *args)
+        self.do_after(jskwargs, *args)
+        return result
+
     # 注册上下文（context）
     def register_context(self, context):
         if isinstance(context, dict):
-            self._registered_context.update(context)
+            new_context = copy(context)
+            for k, v in context.items():
+                if isinstance(v, types.MethodType) and getattr(self, v.__name__):
+                    new_context[k] = partial(self.wrapped_method, func=v)
+            self._registered_context.update(new_context)
 
         # 强制将非MVAR_PREFIX开头的键名改为大写字母开头
         for k in list(self._registered_context.keys()):

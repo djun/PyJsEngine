@@ -1,7 +1,7 @@
 # coding=utf-8
 
 __create_date__ = '2019-10-22'
-__version__ = '0.1.191023B'
+__version__ = '0.1.191024A'
 
 __author__ = 'DJun'
 __all__ = [
