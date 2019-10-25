@@ -3,9 +3,9 @@
 import requests
 from functools import partial
 
-from PyJsEngine import PyJsEngine
+from PyJsEngine import PyJsEngine, get_method_name
 
-__version__ = "1.0.191024"
+__version__ = "1.0.191025"
 
 
 class RequestsJsEngine(PyJsEngine):
@@ -21,6 +21,9 @@ class RequestsJsEngine(PyJsEngine):
     funcn_rpost = "rpost"
     funcn_session = "session"
     funcn_cookies = "cookies"
+    funcn_input = "input"  # TODO 输入验证码
+    funcn_ok = "ok"  # TODO 标记任务完成
+    funcn_err = "err"  # TODO 标记任务失败
 
     attrn_session = "session"
     attrn_cookies = "cookies"
@@ -32,26 +35,51 @@ class RequestsJsEngine(PyJsEngine):
     attrn_get_bytes = "get_bytes"
 
     PREPARE_SCRIPT_REQUESTS_JS = r"""
-        function Gather_data(src, fields) {
-            var data = {};
-            for (var i in fields) {
-                var key = fields[i];
-                data[key] = src[key];
+        var _data = null;
+        
+        function Gather_data(fields=null) {
+            if (fields) {
+                var data = {};
+                for (var i in fields) {
+                    var key = fields[i];
+                    data[key] = _data[key];
+                }
+                return data;
+            } else {
+                return _data;
             }
-            return data;
         }
         
-        function Get_(url) {
-            return Rget({
-                url: url,
-            });  // TODO
+        function Update_data(obj=null) {
+            if (obj) {
+                for (var i in obj) {
+                    _data[i] = obj[i];
+                }
+            }
         }
         
-        function Post_(url, data=null) {
+        function Init_data(obj=null) {
+            _data = {};
+            Update_data(obj);
+        }
+        
+        function Data() {
+            return _data;
+        }
+        
+        function Get_(url, headers=null) {
             return Rget({
                 url: url,
-                data: JSON.stringnify(data),
-            });  // TODO
+                headers: headers != null? JSON.stringnify(headers): null,
+            });
+        }
+        
+        function Post_(url, data=null, headers=null) {
+            return Rpost({
+                url: url,
+                data: data != null? JSON.stringnify(data): null,
+                headers: headers != null? JSON.stringnify(headers): null,
+            });
         }
     """
 
@@ -64,8 +92,11 @@ class RequestsJsEngine(PyJsEngine):
 
         # Register runners for Requests and js2py
         self.register_context({
+            # ---- Engine functions ----
             self.funcn_rget: partial(self.run_rfunc, funcn=self.funcn_rget),
             self.funcn_rpost: partial(self.run_rfunc, funcn=self.funcn_rpost),
+            # ---- Constants ----
+            "user_agent": self.DEFAULT_USER_AGENT,
         })
         self.append_prepare_script(self.PREPARE_SCRIPT_REQUESTS_JS)
 
@@ -108,10 +139,16 @@ class RequestsJsEngine(PyJsEngine):
         jargs = self.args_parser(jskwargs, {
             self.attrn_url: ('url', 's', None),
             self.attrn_data: ('data', 's', None),
-            self.attrn_encoding: ('encoding', 's', None),
-            self.attrn_get_bytes: ('get_bytes', 'b', False),
+            self.attrn_headers: ('headers', 's', None),
         })
         url = jargs['url']
         data = jargs['data']
-        encoding = jargs['encoding'] or self._encoding
-        get_bytes = jargs['get_bytes']
+        headers = jargs['headers']
+
+        try:
+            if funcn == self.funcn_rget:
+                pass
+            elif funcn == self.funcn_rpost:
+                pass
+        except Exception as e:
+            self.internal_exception_handler(funcn=get_method_name(), jskwargs=jskwargs, args=args, e=e)
