@@ -35,46 +35,58 @@ class RequestsJsEngine(PyJsEngine):
     attrn_get_bytes = "get_bytes"
 
     PREPARE_SCRIPT_REQUESTS_JS = r"""
-        var _data = null;
+        function Data() {
+            this._data = {};
+            if (arguments.length > 0)
+                var obj = arguments[0];
+                this.Update_data(obj);
+        }
         
-        function Gather_data(fields=null) {
-            if (fields) {
+        Data.prototype.Update_data = function(obj) {
+            if (obj) {
+                for (var i in obj) {
+                    this._data[i] = obj[i];
+                }
+            }
+        }
+        
+        Data.prototype.Gather_data = function() {
+            if (arguments.length > 0) {
+                var fields = arguments[0];
                 var data = {};
                 for (var i in fields) {
                     var key = fields[i];
-                    data[key] = _data[key];
+                    data[key] = this._data[key];
                 }
                 return data;
             } else {
-                return _data;
+                return this._data;
             }
         }
         
-        function Update_data(obj=null) {
-            if (obj) {
-                for (var i in obj) {
-                    _data[i] = obj[i];
-                }
+        
+        function Get_(url) {
+            var headers = null;
+            if (arguments.length > 1){
+                headers = arguments[1];
             }
-        }
-        
-        function Init_data(obj=null) {
-            _data = {};
-            Update_data(obj);
-        }
-        
-        function Data() {
-            return _data;
-        }
-        
-        function Get_(url, headers=null) {
+            
             return Rget({
                 url: url,
                 headers: headers != null? JSON.stringnify(headers): null,
             });
         }
         
-        function Post_(url, data=null, headers=null) {
+        function Post_(url) {
+            var data = null;
+            var headers = null;
+            if (arguments.length > 1){
+                data = arguments[1];
+            }
+            if (arguments.length > 2){
+                headers = arguments[2];
+            }
+            
             return Rpost({
                 url: url,
                 data: data != null? JSON.stringnify(data): null,
