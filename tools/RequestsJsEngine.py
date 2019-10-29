@@ -2,10 +2,11 @@
 
 import requests
 from functools import partial
+from queue import Queue, Empty
 
 from PyJsEngine import PyJsEngine, get_method_name
 
-__version__ = "1.0.191025"
+__version__ = "1.0.191029"
 
 
 class RequestsJsEngine(PyJsEngine):
@@ -15,13 +16,13 @@ class RequestsJsEngine(PyJsEngine):
     }
     DEFAULT_REQUEST_TIMEOUT = 10
     DEFAULT_ENCODING = "utf-8"
-    DEFAULT_GET_BYTES = False
+    DEFAULT_INPUT_TIMEOUT = 60
 
     funcn_rget = "rget"
     funcn_rpost = "rpost"
-    funcn_session = "session"
-    funcn_cookies = "cookies"
-    funcn_input = "input"  # TODO 输入验证码
+    funcn_session = "session"  # TODO
+    funcn_cookies = "cookies"  # TODO
+    funcn_input = "input"
     funcn_ok = "ok"  # TODO 标记任务完成
     funcn_err = "err"  # TODO 标记任务失败
 
@@ -31,8 +32,8 @@ class RequestsJsEngine(PyJsEngine):
     attrn_headers = "headers"
     attrn_data = "data"
     attrn_timeout = "timeout"
-    attrn_encoding = "encoding"
-    attrn_get_bytes = "get_bytes"
+    # attrn_encoding = "encoding"
+    # attrn_get_bytes = "get_bytes"
 
     PREPARE_SCRIPT_REQUESTS_JS = r"""
         function Data() {
@@ -102,11 +103,17 @@ class RequestsJsEngine(PyJsEngine):
         self._cookies = requests.cookies.RequestsCookieJar()
         self._session.cookies = self._cookies
 
+        self._cookies_str = None
+        self._queue = Queue()
+
+        self._input_timeout = kwargs.get("input_timeout", self.DEFAULT_INPUT_TIMEOUT)
+
         # Register runners for Requests and js2py
         self.register_context({
             # ---- Engine functions ----
             self.funcn_rget: partial(self.run_rfunc, funcn=self.funcn_rget),
             self.funcn_rpost: partial(self.run_rfunc, funcn=self.funcn_rpost),
+            self.funcn_input: self.run_input,
             # ---- Constants ----
             "user_agent": self.DEFAULT_USER_AGENT,
         })
@@ -114,35 +121,96 @@ class RequestsJsEngine(PyJsEngine):
 
         self._logger.debug(msg="RequestsJsEngine loaded. ({})".format(__version__))
 
-    def session_get(self, url, headers=None, timeout=DEFAULT_REQUEST_TIMEOUT, encoding="utf-8",
-                    get_bytes=False):
+    @property
+    def cookies(self):
+        return self._cookies
+
+    @property
+    def cookies_str(self):
+        self._cookies_str = self.get_cookies_str(self._cookies)
+        return self._cookies_str
+
+    @cookies_str.setter
+    def cookies_str(self, cstr):
+        cl = self.get_cookies_list_from_str(cstr)
+        self.set_cookies_list(self._cookies, cl)
+
+    @property
+    def cookies_dict(self):
+        return self.get_cookies_dict(self._cookies)
+
+    @property
+    def cookies_list(self):
+        return self.get_cookies_list(self._cookies)
+
+    @staticmethod
+    def get_cookies_str(cookies):
+        # l = ['%s=%s' % (i.name, i.value) for i in cookies]  # MozillaCookieJar
+        l = ['%s=%s' % (name, value) for name, value in cookies.items()]  # RequestsCookieJar
+        cookie_str = ';'.join(l)
+        return cookie_str
+
+    @staticmethod
+    def get_cookies_list_from_str(cookies_str):
+        result = []
+        if isinstance(cookies_str, str):
+            args = cookies_str.split("&")
+            for a in args:
+                sa = a.split("=")
+                result.append({
+                    "name": sa[0],
+                    "value": sa[1],
+                })
+        return result
+
+    @staticmethod
+    def get_cookies_dict(cookies):
+        # return {i.name: i.value for i in cookies}  # MozillaCookieJar
+        return {name: value for name, value in cookies.items()}  # RequestsCookieJar
+
+    @staticmethod
+    def get_cookies_list(cookies):
+        return [{
+            "version": i.version,
+            "name": i.name,
+            "value": i.value,
+            "path": i.path,
+            "port": i.port,
+            "domain": i.domain,
+            "secure": i.secure,
+            "expires": i.expires,
+            "discard": i.discard,
+        } for i in iter(cookies)]  # RequestsCookieJar
+
+    @staticmethod
+    def set_cookies_list(cookies, cookies_list):
+        for i in cookies_list:
+            cookies.set(**i)  # RequestsCookieJar
+
+    @property
+    def queue(self):
+        return self._queue
+
+    def queue_put(self, item):
+        self._queue.put_nowait(item)
+
+    def session_get(self, url, headers=None, timeout=DEFAULT_REQUEST_TIMEOUT):
         if headers is None:
             headers = self.DEFAULT_HEADERS
         session = self._session
 
         # 获取页面数据
         req = session.get(url, headers=headers, timeout=timeout)
-        if not get_bytes:
-            req.encoding = encoding
-            result = req.text
-        else:
-            result = req.content
-        return result
+        return req
 
-    def session_post(self, url, headers=None, data=None, timeout=DEFAULT_REQUEST_TIMEOUT, encoding="utf-8",
-                     get_bytes=False):
+    def session_post(self, url, headers=None, data=None, timeout=DEFAULT_REQUEST_TIMEOUT):
         if headers is None:
             headers = self.DEFAULT_HEADERS
         session = self._session
 
         # 获取页面数据
         req = session.post(url, headers=headers, data=data, timeout=timeout)
-        if not get_bytes:
-            req.encoding = encoding
-            result = req.text
-        else:
-            result = req.content
-        return result
+        return req
 
     def run_rfunc(self, jskwargs, *args, funcn=None):
         logger = self._logger
@@ -152,15 +220,43 @@ class RequestsJsEngine(PyJsEngine):
             self.attrn_url: ('url', 's', None),
             self.attrn_data: ('data', 's', None),
             self.attrn_headers: ('headers', 's', None),
+            self.attrn_timeout: ('timeout', 'r', None),
         })
         url = jargs['url']
         data = jargs['data']
-        headers = jargs['headers']
+        headers = jargs['headers'] or self.DEFAULT_HEADERS
+        timeout = jargs['timeout'] or self.DEFAULT_REQUEST_TIMEOUT
 
         try:
             if funcn == self.funcn_rget:
-                pass
+                logger.debug(
+                    msg="[RequestsJsEngine]<{}>: Requests-get url={}, headers={}".format(get_method_name(), url,
+                                                                                         headers))
+                self.session_get(url, headers=headers, timeout=timeout)
+                logger.info(msg="[RequestsJsEngine]<{}>: {}".format(get_method_name(), "Requests-get finished!"))
             elif funcn == self.funcn_rpost:
-                pass
+                logger.debug(
+                    msg="[RequestsJsEngine]<{}>: Requests-post url={}, data={}, headers={}".format(get_method_name(),
+                                                                                                   url, data, headers))
+                self.session_post(url, headers=headers, data=data, timeout=timeout)
+                logger.info(msg="[RequestsJsEngine]<{}>: {}".format(get_method_name(), "Requests-post finished!"))
+        except Exception as e:
+            self.internal_exception_handler(funcn=get_method_name(), jskwargs=jskwargs, args=args, e=e)
+
+    def run_input(self, jskwargs, *args, funcn=None):
+        logger = self._logger
+
+        # 属性
+        # jargs = self.args_parser(jskwargs, {
+        # })
+
+        try:
+            try:
+                code = self._queue.get(timeout=self._input_timeout)
+            except Empty:
+                logger.debug(
+                    msg="[RequestsJsEngine]<{}>: {}".format(get_method_name(), "Waiting for inputing code timeout!"))
+                code = "#"
+            return code
         except Exception as e:
             self.internal_exception_handler(funcn=get_method_name(), jskwargs=jskwargs, args=args, e=e)
