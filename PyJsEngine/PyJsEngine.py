@@ -15,8 +15,8 @@ from copy import deepcopy
 
 from jinja2 import Environment, ChoiceLoader, FileSystemLoader, Template
 
-from PyJsEngineBase import PyJsEngineBase, get_method_name
-from MiniUtils import *
+from .PyJsEngineBase import PyJsEngineBase, get_method_name
+from .MiniUtils import *
 
 __version__ = "1.0.191024"
 

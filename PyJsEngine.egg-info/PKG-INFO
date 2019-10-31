@@ -1,0 +1,34 @@
+Metadata-Version: 1.1
+Name: PyJsEngine
+Version: 0.1.191029b0
+Summary: A DIY scripting engine supporting most common customizations. This engine connect JavaScript with Python functions you customized by powerful functions provided by 'js2py'. Now with this engine, you can distribute your doing-many-things scripts separated from your main program. 
+Home-page: https://github.com/djun/PyJsEngine
+Author: DJun
+Author-email: djunxp@gmail.com
+License: GNU General Public License v3 (GPLv3)
+Description-Content-Type: UNKNOWN
+Description: PyJsEngine
+        ===========
+        A DIY scripting engine supporting most common customizations.
+        -------------------------------------------------------------
+        
+        This engine connect JavaScript with Python functions you customized by powerful functions provided by \'js2py\'.
+        
+        Now with this engine, you can distribute your doing-many-things scripts separated from your main program.
+        
+        (Documentation is being constructed...)
+        
+Platform: all
+Classifier: Development Status :: 4 - Beta
+Classifier: Operating System :: OS Independent
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: GNU General Public License v3 (GPLv3)
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: Implementation
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.4
+Classifier: Programming Language :: Python :: 3.5
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Topic :: Software Development :: Libraries

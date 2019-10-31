@@ -13,7 +13,7 @@ from threading import Lock
 from js2py import EvalJs
 from js2py.base import JsObjectWrapper
 
-from MiniUtils import *
+from .MiniUtils import *
 
 
 def get_method_name():
