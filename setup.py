@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='PyJsEngine',
-    version='0.1.191029B',
+    version='0.1.191029C',
     description=(
         'A DIY scripting engine supporting most common customizations. '
         'This engine connect JavaScript with Python functions you customized by powerful functions provided by \'js2py\'. '

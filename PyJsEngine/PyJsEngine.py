@@ -93,7 +93,7 @@ class PyJsEngine(PyJsEngineBase):
 
     def __init__(self, logger=None, msg_handler=None, **kwargs):
         # 父类初始化
-        super().__init__(logger=None, msg_handler=None, **kwargs)
+        super().__init__(logger=logger, msg_handler=msg_handler, **kwargs)
         # 更新MVAR集合
         self.MVAR_SET.update({
             self.MVAR_LOADED_DATA_COUNT,
