@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='PyJsEngine',
-    version='0.1.191029C',
+    version='0.1.191029.4',
     description=(
         'A DIY scripting engine supporting most common customizations. '
         'This engine connect JavaScript with Python functions you customized by powerful functions provided by \'js2py\'. '
@@ -18,8 +18,8 @@ setup(
     license='GNU General Public License v3 (GPLv3)',
     # packages=find_packages(),
     packages=[
-        'PyJsEngine',
-        'PyJsEngine.tools',
+        'pyjse',
+        'pyjse.tools',
     ],
     platforms=["all"],
     url='https://github.com/djun/PyJsEngine',

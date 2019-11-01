@@ -159,7 +159,7 @@ class PyJsEngine(PyJsEngineBase):
         # self._logger.debug(msg="registered_context={}".format(repr(self._registered_context)))  # debug
         self.append_prepare_script(self.PREPARE_SCRIPT_MAIN)
 
-        self._logger.debug(msg="PyJsEngine loaded. ({})".format(__version__))
+        self._logger.debug(msg="pyjse loaded. ({})".format(__version__))
 
     @property
     def encoding(self):
@@ -188,7 +188,7 @@ class PyJsEngine(PyJsEngineBase):
                 cloader = ChoiceLoader(loaders)
 
                 self._j2_env = Environment(loader=cloader)
-                logger.debug(msg="[PyJsEngine]<{}>: Jinja2 Environment initialized.".format(get_method_name()))
+                logger.debug(msg="[pyjse]<{}>: Jinja2 Environment initialized.".format(get_method_name()))
             except Exception as e:
                 self._j2_env = None
                 self.internal_exception_handler(funcn=get_method_name(), e=e)
@@ -245,7 +245,7 @@ class PyJsEngine(PyJsEngineBase):
             if not self._msg_handler or not msg:
                 return
 
-            # logger.info(msg="[PyJsEngine]<{}>: {}".format(get_method_name(), msg))
+            # logger.info(msg="[pyjse]<{}>: {}".format(get_method_name(), msg))
             self._msg_handler(msg, **kwargs)
         except:
             pass
@@ -253,7 +253,7 @@ class PyJsEngine(PyJsEngineBase):
     # 脚本内部异常处理（可被覆写）
     def internal_exception_handler(self, funcn=None, jskwargs=None, args=None, e=None, ignore_err=False):
         logger = self._logger
-        logger.error(msg="[PyJsEngine]<{}>: {}".format(funcn, str(e)))
+        logger.error(msg="[pyjse]<{}>: {}".format(funcn, str(e)))
         logger.debug(msg="------Traceback------\n" + tb.format_exc())
         if e is not None and not ignore_err:
             raise e
@@ -324,10 +324,10 @@ class PyJsEngine(PyJsEngineBase):
 
         # 处理
         try:
-            logger.debug(msg="[PyJsEngine]<{}>: sub-script entered.".format(get_method_name()))
+            logger.debug(msg="[pyjse]<{}>: sub-script entered.".format(get_method_name()))
             result = args[0]()
             logger.debug(
-                msg="[PyJsEngine]<{}>: sub-script exited (result={}).".format(get_method_name(), format(result)))
+                msg="[pyjse]<{}>: sub-script exited (result={}).".format(get_method_name(), format(result)))
             return result
         except Exception as e:
             self.internal_exception_handler(funcn=get_method_name(), jskwargs=jskwargs, args=args, e=e, ignore_err=True)
@@ -370,7 +370,7 @@ class PyJsEngine(PyJsEngineBase):
                     return False
                 return True
             logger.debug(
-                "[PyJsEngine]<{}>: assert value: {} (compare with value: {})".format(get_method_name(),
+                "[pyjse]<{}>: assert value: {} (compare with value: {})".format(get_method_name(),
                                                                                      repr(_value), repr(value)))
 
             return my_assert(_value, value)
@@ -414,7 +414,7 @@ class PyJsEngine(PyJsEngineBase):
                     return False
                 return True
             logger.debug(
-                "[PyJsEngine]<{}>: assert value: {} (compare with value: {})".format(get_method_name(),
+                "[pyjse]<{}>: assert value: {} (compare with value: {})".format(get_method_name(),
                                                                                      repr(_value), repr(value)))
 
             return my_assert_not(_value, value)
@@ -469,7 +469,7 @@ class PyJsEngine(PyJsEngineBase):
                     proc_dict[proc_name] = func
                     context[proc_name.capitalize()] = func
 
-                logger.debug(msg="[PyJsEngine]<{}>: proc_names={} defined.".format(get_method_name(), repr(proc_names)))
+                logger.debug(msg="[pyjse]<{}>: proc_names={} defined.".format(get_method_name(), repr(proc_names)))
             else:
                 raise ValueError("proc_name={} name illegal!".format(repr(proc_name)))
         except Exception as e:
@@ -491,7 +491,7 @@ class PyJsEngine(PyJsEngineBase):
             if isinstance(proc_name, str) and proc_name != '':
                 func = proc_dict.get(proc_name)
                 if func is not None:
-                    logger.debug(msg="[PyJsEngine]<{}>: proc_name={} found!".format(get_method_name(), repr(proc_name)))
+                    logger.debug(msg="[pyjse]<{}>: proc_name={} found!".format(get_method_name(), repr(proc_name)))
 
                     # 传递参数至要call的procedure
                     new_jargs = deepcopy(jargs)
@@ -570,10 +570,10 @@ class PyJsEngine(PyJsEngineBase):
                     env = self._j2_env
                     try:
                         template = env.get_template(_from_file)
-                        logger.debug("[PyJsEngine]<{}>: Template loaded with env.".format(get_method_name()))
+                        logger.debug("[pyjse]<{}>: Template loaded with env.".format(get_method_name()))
                     except Exception as e:
                         template = None
-                        logger.debug("[PyJsEngine]<{}>: Loading template with env failed! ({})".format(
+                        logger.debug("[pyjse]<{}>: Loading template with env failed! ({})".format(
                             get_method_name(),
                             str(e)))
                     if template is None:
@@ -588,13 +588,13 @@ class PyJsEngine(PyJsEngineBase):
                 finally:
                     if from_real_file:
                         fp.close()
-                logger.debug("[PyJsEngine]<{}>: template_str={}".format(get_method_name(), repr(template_str)))
+                logger.debug("[pyjse]<{}>: template_str={}".format(get_method_name(), repr(template_str)))
                 template = Template(template_str)
 
             vars_dict = self.get_vars_dict()
             template_render_result = template.render(**vars_dict)
-            # logger.debug("[PyJsEngine]<{}>: template_render_result={}".format(get_method_name(), repr(template_render_result)))
-            logger.debug("[PyJsEngine]<{}>: len(template_render_result)={}".format(
+            # logger.debug("[pyjse]<{}>: template_render_result={}".format(get_method_name(), repr(template_render_result)))
+            logger.debug("[pyjse]<{}>: len(template_render_result)={}".format(
                 get_method_name(),
                 len(template_render_result) if template_render_result is not None else -1))
 
@@ -635,7 +635,7 @@ class PyJsEngine(PyJsEngineBase):
             vars = self.get_vars()
             if isinstance(key, str) and key != '':
                 logger.debug(
-                    "[PyJsEngine]<{}>: setting {}({})...".format(get_method_name(), repr(key), repr(set_type)))
+                    "[pyjse]<{}>: setting {}({})...".format(get_method_name(), repr(key), repr(set_type)))
                 if set_type == self.SET_TYPE_OBJECT:
                     value = args[0]()
                     vars[key] = value
@@ -646,7 +646,7 @@ class PyJsEngine(PyJsEngineBase):
                     vars[key] = value
                 else:
                     raise ValueError("set_type illegal!")
-                logger.debug("[PyJsEngine]<{}>: value={}, type(value)={}".format(get_method_name(),
+                logger.debug("[pyjse]<{}>: value={}, type(value)={}".format(get_method_name(),
                                                                                  repr(value), repr(type(value))))
             else:
                 raise ValueError("key name illegal!")
@@ -683,7 +683,7 @@ class PyJsEngine(PyJsEngineBase):
                 else:
                     raise RuntimeError()
                 tmp_dict[k] = v
-                logger.debug("[PyJsEngine]<{}>: preparing {} = {} ...".format(get_method_name(), repr(k), repr(v)))
+                logger.debug("[pyjse]<{}>: preparing {} = {} ...".format(get_method_name(), repr(k), repr(v)))
             # 检查到全部变量定义不存在问题，才执行update进行更新
             for k, v in tmp_dict.items():
                 vars[k] = v
@@ -708,9 +708,9 @@ class PyJsEngine(PyJsEngineBase):
             # vars_dict = self.get_vars_dict()
             if isinstance(key, str) and key != '':
                 logger.debug(
-                    "[PyJsEngine]<{}>: getting {}...".format(get_method_name(), repr(key)))
+                    "[pyjse]<{}>: getting {}...".format(get_method_name(), repr(key)))
                 value = vars_dict.get(key, defvalue)
-                logger.debug("[PyJsEngine]<{}>: value={}, type(value)={}".format(get_method_name(),
+                logger.debug("[pyjse]<{}>: value={}, type(value)={}".format(get_method_name(),
                                                                                  repr(value), repr(type(value))))
 
                 return value
@@ -765,7 +765,7 @@ class PyJsEngine(PyJsEngineBase):
         # 处理
         try:
             vars = self.get_vars()
-            logger.debug(msg="[PyJsEngine]<{}>: loading vars started! ({})".format(get_method_name(), file_name))
+            logger.debug(msg="[pyjse]<{}>: loading vars started! ({})".format(get_method_name(), file_name))
             if isinstance(file_name, str) and file_name != '':
                 if file_type == self.FILE_TYPE_CSV:
                     fp = None
@@ -779,7 +779,7 @@ class PyJsEngine(PyJsEngineBase):
                             if len(r) <= 0 or len([1 for i in r if i is not None]) <= 0:
                                 # 跳过完全空行
                                 logger.info(
-                                    msg="[PyJsEngine]<{}>: skipping empty row... ({})".format(
+                                    msg="[pyjse]<{}>: skipping empty row... ({})".format(
                                         get_method_name(),
                                         str(nr + 1)))
                                 continue
@@ -788,7 +788,7 @@ class PyJsEngine(PyJsEngineBase):
                             var_name = r[0]
                             if not var_name:
                                 logger.info(
-                                    msg="[PyJsEngine]<{}>: skipping empty var name... ({})".format(
+                                    msg="[pyjse]<{}>: skipping empty var name... ({})".format(
                                         get_method_name(),
                                         str(nr + 1)))
                                 continue
@@ -804,7 +804,7 @@ class PyJsEngine(PyJsEngineBase):
                             # 存入变量字典
                             vars[var_name] = var_value
                             logger.info(
-                                msg="[PyJsEngine]<{}>: var stored! ({} -> {}) ({})".format(
+                                msg="[pyjse]<{}>: var stored! ({} -> {}) ({})".format(
                                     get_method_name(),
                                     repr(var_name), repr(var_value), str(nr + 1)))
                     except Exception as e:
@@ -817,7 +817,7 @@ class PyJsEngine(PyJsEngineBase):
                     raise ValueError("file type illegal!")
             else:
                 raise ValueError("file name illegal!")
-            logger.debug(msg="[PyJsEngine]<{}>: loading vars finished! ({})".format(get_method_name(), file_name))
+            logger.debug(msg="[pyjse]<{}>: loading vars finished! ({})".format(get_method_name(), file_name))
         except Exception as e:
             self.internal_exception_handler(funcn=get_method_name(), jskwargs=jskwargs, args=args, e=e)
 
@@ -832,7 +832,7 @@ class PyJsEngine(PyJsEngineBase):
             allow_none = kwargs.get('allow_none')
 
             count = max(self.count_file_lines(file_name, encoding=encoding) - 1, 0)
-            logger.info(msg="[PyJsEngine]<{}>: lines count: {}".format(get_method_name(), str(count)))
+            logger.info(msg="[pyjse]<{}>: lines count: {}".format(get_method_name(), str(count)))
 
             fp = None
             try:
@@ -848,7 +848,7 @@ class PyJsEngine(PyJsEngineBase):
                     if len(d) <= 0 or len([1 for a, b in d.items() if b is not None]) <= 0:
                         # 跳过完全空行
                         logger.info(
-                            msg="[PyJsEngine]<{}>: skipping empty row... ({}/{})".format(
+                            msg="[pyjse]<{}>: skipping empty row... ({}/{})".format(
                                 get_method_name(),
                                 str(nd + 1),
                                 str(count)))
@@ -911,12 +911,12 @@ class PyJsEngine(PyJsEngineBase):
 
         # 处理
         try:
-            logger.debug(msg="[PyJsEngine]<{}>: loading data started! ({})".format(get_method_name(), file_name))
+            logger.debug(msg="[pyjse]<{}>: loading data started! ({})".format(get_method_name(), file_name))
             if isinstance(file_name, str) and file_name != '':
                 data_list, fieldnames, count = self.load_data_file(file_name, file_type=file_type, encoding=encoding,
                                                                    auto_strip=auto_strip, allow_none=allow_none)
-                logger.info(msg="[PyJsEngine]<{}>: lines count: {}".format(get_method_name(), str(count)))
-                logger.info(msg="[PyJsEngine]<{}>: fieldnames: {}".format(get_method_name(), repr(fieldnames)))
+                logger.info(msg="[pyjse]<{}>: lines count: {}".format(get_method_name(), str(count)))
+                logger.info(msg="[pyjse]<{}>: fieldnames: {}".format(get_method_name(), repr(fieldnames)))
 
                 new_data_list = []
                 for nd, d in enumerate(data_list):
@@ -927,10 +927,10 @@ class PyJsEngine(PyJsEngineBase):
 
                     d[self.MVAR_LOADED_DATA_COLS] = ",".join(fieldnames)
                     # logger.debug(
-                    #     msg="[PyJsEngine]<{}>: row read! ({}/{})".format(get_method_name(), str(nd + 1), str(count)))
+                    #     msg="[pyjse]<{}>: row read! ({}/{})".format(get_method_name(), str(nd + 1), str(count)))
                     new_data_list.append(d)
 
-                logger.info(msg="[PyJsEngine]<{}>: loading data finished! ({})".format(get_method_name(), file_name))
+                logger.info(msg="[pyjse]<{}>: loading data finished! ({})".format(get_method_name(), file_name))
                 return iter(new_data_list)
             else:
                 raise ValueError("file name illegal!")
@@ -989,7 +989,7 @@ class PyJsEngine(PyJsEngineBase):
 
         # 处理
         try:
-            logger.debug(msg="[PyJsEngine]<{}>: output started!".format(get_method_name()))
+            logger.debug(msg="[pyjse]<{}>: output started!".format(get_method_name()))
             if isinstance(file_name, str) and file_name != '':
                 with self.get_output_lock(file_name):
                     if len(args) > 0:
@@ -1024,7 +1024,7 @@ class PyJsEngine(PyJsEngineBase):
                                         # 改成取连同全局变量在内的变量
                                         row[c] = vars_dict.get(c)
                                     cdw.writerow(row)
-                                    logger.info(msg="[PyJsEngine]<{}>: row written!".format(get_method_name()))
+                                    logger.info(msg="[pyjse]<{}>: row written!".format(get_method_name()))
                                 except Exception as e:
                                     raise e
                                 finally:
@@ -1037,7 +1037,7 @@ class PyJsEngine(PyJsEngineBase):
                             raise ValueError("file type illegal!")
             else:
                 raise ValueError("file name illegal!")
-            logger.debug(msg="[PyJsEngine]<{}>: output finished!".format(get_method_name()))
+            logger.debug(msg="[pyjse]<{}>: output finished!".format(get_method_name()))
         except Exception as e:
             self.internal_exception_handler(funcn=get_method_name(), jskwargs=jskwargs, args=args, e=e)
 
@@ -1068,7 +1068,7 @@ class PyJsEngine(PyJsEngineBase):
         try:
             status = None
             if os_cmd != '':
-                logger.info(msg="[PyJsEngine]<{}>: Executing OS command... (<{}><{}>)".format(
+                logger.info(msg="[pyjse]<{}>: Executing OS command... (<{}><{}>)".format(
                     get_method_name(),
                     repr(os_cmd), repr(os_args)))
                 logger.info(msg="-" * 36)
@@ -1076,8 +1076,8 @@ class PyJsEngine(PyJsEngineBase):
                                                      cwd=(self._path[0] if len(self._path) > 0 else None))
                 logger.info(msg="".join(msgs))
                 logger.info(msg="-" * 36)
-                logger.info(msg="[PyJsEngine]<{}>: status <{}>".format(get_method_name(), repr(status)))
-                logger.info(msg="[PyJsEngine]<{}>: OS command executed! (<{}><{}>)".format(
+                logger.info(msg="[pyjse]<{}>: status <{}>".format(get_method_name(), repr(status)))
+                logger.info(msg="[pyjse]<{}>: OS command executed! (<{}><{}>)".format(
                     get_method_name(),
                     repr(os_cmd), repr(os_args)))
 

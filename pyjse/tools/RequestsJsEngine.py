@@ -4,7 +4,7 @@ import requests
 from functools import partial
 from queue import Queue, Empty
 
-from PyJsEngine import PyJsEngine, get_method_name
+from pyjse.PyJsEngine import PyJsEngine, get_method_name
 
 __version__ = "1.0.191029"
 
